@@ -32,11 +32,15 @@ echo ""
 echo "✓ Container 'icloud' is up. Status:"
 $DOCKER ps --filter name=icloud --format "  {{.Names}} | {{.Status}}"
 
+# Pull the username out of config.yaml so the printed command line below works
+# for anyone who runs this script with their own Apple ID in config.yaml.
+USERNAME=$(awk -F: '/^[[:space:]]*username:/ { gsub(/[[:space:]"'"'"']/, "", $2); print $2; exit }' "$CONFIG_DIR/config/config.yaml" 2>/dev/null || echo "YOUR_APPLE_ID")
+
 echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo "  NEXT (interactive — enter password + 2FA code on iPhone)"
 echo "════════════════════════════════════════════════════════════════"
-echo "  ssh nas '$DOCKER exec -it icloud sh -c \"icloud --username=epheterson@me.com --session-directory=/config/session_data\"'"
+echo "  ssh nas '$DOCKER exec -it icloud sh -c \"icloud --username=$USERNAME --session-directory=/config/session_data\"'"
 echo ""
 echo "After that completes, watch first sync with:"
 echo "  ssh nas '$DOCKER logs -f icloud'"

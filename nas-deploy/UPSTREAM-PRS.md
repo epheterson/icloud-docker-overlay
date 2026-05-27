@@ -188,7 +188,7 @@ PR pins the fork branch temporarily; will swap to the upstream tag once
 that PR merges and a new icloudpy is released.
 
 ## Tests
-15 new:
+30 new tests:
 
 - `tests/test_library_destinations.py` (10 tests): config helper returns
   `{}` for missing config / non-dict values / coerces stringly,
@@ -201,7 +201,9 @@ that PR merges and a new icloudpy is released.
   `photo.versions` exception is non-fatal,
   `None` collect result for .mov is skipped.
 
-Full suite: 430 passed (was 415), 20 pre-existing failures unchanged.
+- `tests/test_filename_format.py` (15 tests): config helper (defaults, normalisation, fallback), generator branching (metadata vs simple, extensionless), module-default singleton (set/reset/invalid-ignored), AND a critical end-to-end regression test that asserts `generate_photo_path` honors the module-level default (caught a bug pre-submission where the threading was broken).
+
+Full suite: 445 passed (was 415), 20 pre-existing failures unchanged.
 
 Closes #199.
 ```

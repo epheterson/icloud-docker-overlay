@@ -1,6 +1,6 @@
-# Upstream PR submission guide (six PRs, push tonight)
+# Upstream PR submission guide (eight PRs, push tonight)
 
-Six PRs total — two to `mandarons/icloudpy`, four to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
+Eight PRs total — two to `mandarons/icloudpy`, six to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
 
 For each PR: easiest path is to **open the URL in a browser** and paste the body manually. The `gh pr create` commands are provided as alternatives.
 
@@ -357,6 +357,124 @@ no behaviour change.
 - Works the same way in both `filename_format: metadata` and
   `filename_format: simple` modes — the `.original.bak` qualifier is
   appended to whatever the base filename would have been.
+```
+
+---
+
+## PR 7: `--dry-run` CLI flag
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/feat/dry-run
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes (no upstream library changes, no other-PR dependencies)
+**Title:** `feat: --dry-run CLI flag (authenticate, summarise, exit without writing)`
+
+```markdown
+## Summary
+Restores the unwired `--dry-run` flag documented in
+`NOTIFICATION_CONFIG.md`, and extends it to a full pre-flight check:
+authenticate against iCloud, summarise what the real loop would do
+for each configured service, then exit cleanly without downloading,
+deleting, or notifying.
+
+## Motivation
+Today there is no safe way to verify an icloud-docker install before
+letting it loose on a fresh destination. A typo in the bind-mount
+path or a misconfigured Apple ID currently means terabytes of iCloud
+data get dumped into the wrong place before the user notices.
+
+`python src/main.py --dry-run` (or `docker exec icloud icloud
+--dry-run` once the entrypoint forwards the flag) now does the
+auth + enumeration once, prints a summary, and exits.
+
+## Implementation
+- `src/main.py`: argparse wrapper, calls `sync.sync(dry_run=args.dry_run)`.
+- `src/sync.py`: `sync()` gains a `dry_run: bool = False` kwarg
+  (default keeps existing behaviour). When True, the loop branches to
+  the new `_perform_dry_run` helper after auth and `return`s instead
+  of entering the retry/sleep cycle.
+- `_perform_dry_run` logs (INFO):
+  - Drive destination path + root-level item count, or "would be
+    skipped" if `drive:` is absent.
+  - Photos destination path + library names, or "would be skipped"
+    if `photos:` is absent.
+  - A trailing "DRY RUN complete — no files were written" line.
+  - 2FA-pending branch logs a hint to finish interactive auth first.
+
+Enumeration failures are caught + logged as warnings — dry-run never
+crashes the container.
+
+## Tests
+11 new tests in `tests/test_dry_run.py`:
+- 6 `_perform_dry_run` behaviour tests (drive count, photo libs,
+  per-service enumeration failure, completion line, skipped-service
+  announcement).
+- 4 integration tests on `sync.sync(dry_run=True)` via mocks (syncs
+  not invoked, notifications not sent, loop not entered,
+  2FA-pending branch).
+- 1 signature compat test (default kwarg).
+
+Full suite passes.
+```
+
+---
+
+## PR 8: `require_mount_marker` failsafe (ports boredazfcuk's `.mounted` pattern)
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/feat/require-mount-marker
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes (no upstream library changes, no other-PR dependencies)
+**Title:** `feat: optional require_mount_marker — refuse to sync without a failsafe marker file`
+
+```markdown
+## Summary
+Ports the boredazfcuk/docker-icloudpd `.mounted` safety pattern.
+Defends against silent bind-mount failures (typo in host path,
+missing share, wrong permissions) that would otherwise dump an entire
+iCloud Drive / Photos library into the wrong place.
+
+## New optional config (all default-OFF, no breaking change)
+- `drive.require_mount_marker` (bool, default False)
+- `photos.require_mount_marker` (bool, default False)
+- `app.mount_marker_filename` (str, default `.mounted`)
+
+When enabled, sync refuses to proceed until the marker file exists
+in the destination directory. The countdown is NOT advanced on a
+missed check — the next interval re-checks once the user has fixed
+the mount and `touch`-ed the marker (so recovery is just re-mount
++ touch, no container restart needed).
+
+## Motivation
+Two related risks today:
+1. Silent bind-mount failure → the container happily writes
+   terabytes into a tmpfs the user can't see.
+2. Wrong path in compose → wrong directory gets clobbered.
+
+boredazfcuk/docker-icloudpd has solved this since at least 2024 by
+requiring a user-touched `.mounted` file in each download destination
+before sync runs. This PR ports the same pattern as an opt-in
+config flag.
+
+## Implementation
+- `config_parser.get_drive_require_mount_marker(config)` →
+  `bool` (default False).
+- `config_parser.get_photos_require_mount_marker(config)` →
+  `bool` (default False).
+- `config_parser.get_mount_marker_filename(config)` →
+  `str` (default `.mounted`).
+- New `sync._check_mount_marker(destination_path, marker_filename,
+  required, service_name)` — returns True/False; False causes the
+  caller to skip this cycle without resetting the countdown.
+- Called from `_perform_drive_sync` and `_perform_photos_sync`
+  right after `prepare_*_destination`, before any sync work begins.
+
+## Tests
+11 new tests in `tests/test_mount_marker.py`:
+- 6 config-helper tests (defaults + read + custom filename).
+- 5 `_check_mount_marker` behaviour tests (not-required, present,
+  absent, error logging with actionable instructions, custom
+  filename).
+
+Full suite passes.
 ```
 
 ---

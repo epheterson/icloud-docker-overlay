@@ -20,6 +20,8 @@ Same Dockerfile, same entrypoint, same config schema as upstream — just six [p
 | **Migrate from boredazfcuk/docker-icloudpd without re-download** | ❌ Different filename convention → full re-download | ✅ Optional `photos.filename_format: simple` + size-based existence check |
 | **Filename collision safety** | ❌ Two iCloud photos sharing a name silently overwrite | ✅ Collision-fallback to suffix path, both preserved |
 | **Hide originals of edited photos from photo apps** | ❌ Original + edited both visible (duplicates in Plex etc.) | ✅ Optional `photos.preserve_originals_as_bak` writes original as `IMG_1234.HEIC.original.bak` |
+| **`--dry-run` pre-flight check** | ❌ No way to verify auth + mounts before downloading | ✅ `python src/main.py --dry-run` authenticates, summarises, exits without writing |
+| **Mount-failsafe marker file** (boredazfcuk-style `.mounted` check) | ❌ Silent bind-mount failure → terabytes into wrong dir | ✅ Optional `{drive,photos}.require_mount_marker` refuses to sync unless `.mounted` exists |
 | Everything else | ✅ | ✅ identical (same source, same Dockerfile, same entrypoint) |
 
 All new config keys are **opt-in with safe defaults** — vanilla mandarons users see no behavior change.
@@ -300,11 +302,49 @@ Unedited photos (no `original_alt` available for them on iCloud) are unaffected.
 
 To restore an original: rename `IMG_1234.HEIC.original.bak` → `IMG_1234.HEIC`. Easy `find . -name "*.original.bak"` to enumerate all hidden originals.
 
+### `--dry-run` pre-flight check
+
+```bash
+# Run once after editing config.yaml + docker-compose.yml, before letting
+# the real sync loop touch any files:
+docker exec -it icloud sh -c "su-exec abc python /app/src/main.py --dry-run"
+```
+
+Authenticates against iCloud, prints:
+- Drive destination + root-level item count (or "would be skipped" if `drive:` is absent)
+- Photos destination + available library names (or "would be skipped" if `photos:` is absent)
+- A `DRY RUN complete — no files were written` line
+
+Exits non-zero only on hard auth failure. If 2FA is pending, prints a hint to finish interactive auth first. No notifications sent, no files written, no infinite loop. Cheap safety net before a fresh install.
+
+### `require_mount_marker` (default: `false`)
+
+Ports boredazfcuk/docker-icloudpd's `.mounted` failsafe. Refuses to sync a service unless a marker file is present in its destination directory — the user's way of asserting "this path is correctly bind-mounted."
+
+```yaml
+app:
+  mount_marker_filename: .mounted     # optional, default ".mounted"
+
+drive:
+  require_mount_marker: true
+
+photos:
+  require_mount_marker: true
+```
+
+After confirming the container's destination dirs really are your intended host paths, run once on each:
+```bash
+ssh nas 'touch "/volume1/your/drive/.mounted" "/volume1/your/photos/.mounted"'
+```
+From that point on, if the bind-mount silently fails (typo, missing share, NFS unreachable, permissions reset), the container refuses to sync — preventing terabytes of iCloud data from being dumped into a tmpfs the user can't see. The countdown is not advanced on a missed check, so re-mounting + touching the file is enough to recover (no container restart needed).
+
+Default is OFF for backward compatibility; existing setups see no behaviour change.
+
 ---
 
 ## How the image is composed (provenance)
 
-This image is built from a fork of `mandarons/icloud-docker` whose `requirements.txt` pins a fork of `mandarons/icloudpy`. Six pending upstream PRs:
+This image is built from a fork of `mandarons/icloud-docker` whose `requirements.txt` pins a fork of `mandarons/icloudpy`. Eight pending upstream PRs:
 
 ### To `mandarons/icloudpy` (the underlying iCloud Python library)
 1. [`fix/ios-26.4-auth`](https://github.com/epheterson/icloudpy/tree/fix/ios-26.4-auth) — iOS 26.4 SRP auth fix
@@ -315,6 +355,8 @@ This image is built from a fork of `mandarons/icloud-docker` whose `requirements
 4. [`feat/photos-live-photo-pair-download`](https://github.com/epheterson/icloud-docker/tree/feat/photos-live-photo-pair-download) — uses the new icloudpy API to download `.mov` pair
 5. [`feat/photos-filename-format-simple`](https://github.com/epheterson/icloud-docker/tree/feat/photos-filename-format-simple) — simple naming + collision fallback
 6. [`feat/photos-preserve-originals-as-bak`](https://github.com/epheterson/icloud-docker/tree/feat/photos-preserve-originals-as-bak) — `.original.bak` for hidden originals
+7. [`feat/dry-run`](https://github.com/epheterson/icloud-docker/tree/feat/dry-run) — `--dry-run` CLI flag (authenticate + enumerate + exit)
+8. [`feat/require-mount-marker`](https://github.com/epheterson/icloud-docker/tree/feat/require-mount-marker) — opt-in `.mounted` failsafe file requirement
 
 The combined branches for the actual build are [`epheterson/icloudpy@combined/all-fixes`](https://github.com/epheterson/icloudpy/tree/combined/all-fixes) and [`epheterson/icloud-docker@combined/all-features`](https://github.com/epheterson/icloud-docker/tree/combined/all-features).
 
@@ -332,6 +374,7 @@ This README will be updated with "✅ Upstream has merged X" markers as each PR 
 
 | Version | Date | Notes |
 |---|---|---|
+| `0.5.0` | 2026-05-27 | New `--dry-run` CLI flag (PR 7) + opt-in `require_mount_marker` failsafe (PR 8) — safety net for fresh installs |
 | `0.4.1` | 2026-05-27 | Code-review pass: `validate_file_sizes` filters internal `live_video_*` keys; simple+bak interaction fixed; `setup.sh` uses `su-exec abc` for 2FA |
 | `0.4.0` | 2026-05-27 | Added `preserve_originals_as_bak`; split combined branch into six PR-able feature branches |
 | `0.3.x` | 2026-05-27 | filename_format simple + collision fallback + multiple critical fixes |

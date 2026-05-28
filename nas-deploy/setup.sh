@@ -6,7 +6,7 @@
 # interactive 2FA (can't be scripted — Apple's flow requires manual code entry).
 set -eu
 
-REPO_BASE="https://raw.githubusercontent.com/epheterson/icloud-docker-overlay/main/nas-deploy"
+REPO_BASE="https://raw.githubusercontent.com/epheterson/icloud-docker-plus/main/nas-deploy"
 CONFIG_DIR="/volume1/docker/icloud"
 # Photos reuse existing boredazfcuk-format dirs at /volume1/ELP NAS/Pictures/iCloud/{Eric,Shared}
 # via filename_format: simple in config.yaml — no re-download.
@@ -21,7 +21,7 @@ echo "→ Fetching compose + config from $REPO_BASE..."
 curl -fsSL "$REPO_BASE/docker-compose.yml" -o "$CONFIG_DIR/docker-compose.yml"
 curl -fsSL "$REPO_BASE/config.yaml" -o "$CONFIG_DIR/config/config.yaml"
 
-echo "→ Pulling ghcr.io/epheterson/icloud-docker-overlay:latest..."
+echo "→ Pulling ghcr.io/epheterson/icloud-docker-plus:latest..."
 cd "$CONFIG_DIR"
 $DOCKER compose pull
 

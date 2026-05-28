@@ -1,12 +1,12 @@
-# icloud-docker-overlay
+# icloud-docker-plus
 
-> Drop-in replacement for [`mandarons/icloud-drive`](https://hub.docker.com/r/mandarons/icloud-drive) that **works on iOS 26.4+**, **downloads Live Photos correctly**, **keeps Personal and Shared libraries in separate dirs**, and **lets boredazfcuk users migrate without re-downloading their entire library**.
+> **`mandarons/icloud-docker` + four upstream PRs, pre-merge.** Same project, same Dockerfile, same entrypoint — plus four user-facing improvements I've submitted as separate PRs. While those PRs are in review, this image gets you the fixes today.
 
 ```bash
-docker pull ghcr.io/epheterson/icloud-docker-overlay:latest
+docker pull ghcr.io/epheterson/icloud-docker-plus:latest
 ```
 
-Built from a fork of `mandarons/icloud-docker` with four pending upstream PRs already applied. When all four PRs merge upstream, this image gets archived — switch back to `mandarons/icloud-drive:latest`.
+**Not a competitor or fork-with-different-vision.** [`mandarons/icloud-docker`](https://github.com/mandarons/icloud-docker) is the project; this image just ships my six [open PRs](#how-the-image-is-composed-provenance) (2 to `icloudpy` + 4 to `icloud-docker`) pre-merge. Every line is openly submitted upstream and this repo + image will be archived the moment they land there. Switch back to `mandarons/icloud-drive:latest` then — your config and on-disk files keep working unchanged.
 
 ---
 
@@ -33,7 +33,7 @@ All new config keys are **opt-in with safe defaults** — vanilla mandarons user
 ```yaml
 services:
   icloud:
-    image: ghcr.io/epheterson/icloud-docker-overlay:latest
+    image: ghcr.io/epheterson/icloud-docker-plus:latest
     container_name: icloud
     restart: unless-stopped
     environment:
@@ -139,7 +139,7 @@ drive:
 ```yaml
 services:
   icloud:
-    image: ghcr.io/epheterson/icloud-docker-overlay:latest
+    image: ghcr.io/epheterson/icloud-docker-plus:latest
     container_name: icloud
     restart: unless-stopped
     environment:
@@ -189,7 +189,7 @@ If you're already running mandarons and it's stuck on iOS 26.4 (#426) or you wan
 ```yaml
 # Change this in your existing docker-compose.yml:
 - image: mandarons/icloud-drive:latest
-+ image: ghcr.io/epheterson/icloud-docker-overlay:latest
++ image: ghcr.io/epheterson/icloud-docker-plus:latest
 ```
 
 Then `docker compose pull && docker compose up -d`. Your existing config.yaml works unchanged — all new features are opt-in.

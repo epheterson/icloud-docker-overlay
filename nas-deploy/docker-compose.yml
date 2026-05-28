@@ -14,7 +14,7 @@
 #   3. First sync kicks off per sync_interval in config.yaml.
 services:
   icloud:
-    image: ghcr.io/epheterson/icloud-docker-overlay:latest
+    image: ghcr.io/epheterson/icloud-docker-plus:latest
     container_name: icloud
     restart: unless-stopped
     environment:

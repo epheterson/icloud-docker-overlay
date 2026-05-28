@@ -23,6 +23,7 @@ Same Dockerfile, same entrypoint, same config schema as upstream — just six [p
 | **`--dry-run` pre-flight check** | ❌ No way to verify auth + mounts before downloading | ✅ `python src/main.py --dry-run` authenticates, summarises, exits without writing |
 | **Mount-failsafe marker file** (boredazfcuk-style `.mounted` check) | ❌ Silent bind-mount failure → terabytes into wrong dir | ✅ Optional `{drive,photos}.require_mount_marker` refuses to sync unless `.mounted` exists |
 | **Embedded web UI** (re-auth from your phone, dashboard, log tail) | ❌ Port 80 EXPOSEd but never used | ✅ Opt-in via `app.web_ui.enabled`, runs on `:8080`, Apple-leaning UI |
+| **Keyring persists across container recreations** | ❌ `$HOME/.local/share/python_keyring/` is wiped on every `compose up`; user re-auths on every image bump | ✅ Entrypoint pins `XDG_DATA_HOME=/config`, keyring lives at `/config/python_keyring/keyring_pass.cfg` |
 | Everything else | ✅ | ✅ identical (same source, same Dockerfile, same entrypoint) |
 
 All new config keys are **opt-in with safe defaults** — vanilla mandarons users see no behavior change.
@@ -394,6 +395,7 @@ This image is built from a fork of `mandarons/icloud-docker` whose `requirements
 7. [`feat/dry-run`](https://github.com/epheterson/icloud-docker/tree/feat/dry-run) — `--dry-run` CLI flag (authenticate + enumerate + exit)
 8. [`feat/require-mount-marker`](https://github.com/epheterson/icloud-docker/tree/feat/require-mount-marker) — opt-in `.mounted` failsafe file requirement
 9. [`feat/web-ui`](https://github.com/epheterson/icloud-docker/tree/feat/web-ui) — embedded Flask dashboard + on-device 2FA re-auth flow
+10. [`feat/persist-keyring`](https://github.com/epheterson/icloud-docker/tree/feat/persist-keyring) — `XDG_DATA_HOME=/config` so the keyring survives container recreation
 
 The combined branches for the actual build are [`epheterson/icloudpy@combined/all-fixes`](https://github.com/epheterson/icloudpy/tree/combined/all-fixes) and [`epheterson/icloud-docker@combined/all-features`](https://github.com/epheterson/icloud-docker/tree/combined/all-features).
 
@@ -411,6 +413,7 @@ This README will be updated with "✅ Upstream has merged X" markers as each PR 
 
 | Version | Date | Notes |
 |---|---|---|
+| `0.6.5` | 2026-05-28 | Persist python-keyring at `/config/python_keyring/` (PR 10) so the keyring survives container recreate. Plus iterative web-UI polish: truthful auth-state pill, library_destinations on dashboard, "already signed in" view on `/auth`, ProxyFix + no-cache headers for behind-proxy behaviour. |
 | `0.6.0` | 2026-05-28 | Embedded web UI (PR 9): dashboard + on-device 2FA re-auth flow (Apple-leaning design, opt-in via `app.web_ui.enabled`) |
 | `0.5.0` | 2026-05-27 | New `--dry-run` CLI flag (PR 7) + opt-in `require_mount_marker` failsafe (PR 8) — safety net for fresh installs |
 | `0.4.1` | 2026-05-27 | Code-review pass: `validate_file_sizes` filters internal `live_video_*` keys; simple+bak interaction fixed; `setup.sh` uses `su-exec abc` for 2FA |

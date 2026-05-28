@@ -1,6 +1,6 @@
-# Upstream PR submission guide (nine PRs, push tonight)
+# Upstream PR submission guide (ten PRs, push tonight)
 
-Nine PRs total — two to `mandarons/icloudpy`, seven to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
+Ten PRs total — two to `mandarons/icloudpy`, eight to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
 
 For each PR: easiest path is to **open the URL in a browser** and paste the body manually. The `gh pr create` commands are provided as alternatives.
 
@@ -580,6 +580,83 @@ end-to-end — no real network.
 - CSRF token (only needed if the maintainer wants to remove the
   reverse-proxy assumption).
 - Inline content browser (Notes, Drive contents).
+```
+
+---
+
+## PR 10: persist python-keyring across container recreations
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/feat/persist-keyring
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes (no upstream library changes, no other-PR dependencies; entrypoint-only change)
+**Title:** `fix: persist python-keyring at /config/python_keyring so it survives container recreate`
+
+```markdown
+## Summary
+The sync loop (`src/sync.py:_retrieve_password`) requires a keyring
+entry containing the Apple ID password on every container start —
+even when `/config/session_data` already has valid trusted cookies.
+`icloudpy.ICloudPyService.__init__` also raises
+`ICloudPyNoStoredPasswordAvailableException` when password is None
+and the keyring is empty, so a populated keyring is a hard
+prerequisite, period.
+
+The keyring lives at `$XDG_DATA_HOME/python_keyring/keyring_pass.cfg`,
+where `$XDG_DATA_HOME` defaults to `$HOME/.local/share`. In this
+container `$HOME=/home/abc` — container-local. Every `docker compose
+up` after a pull, PUID change, or image bump wipes the directory and
+forces the user to interactively re-authenticate (via the bundled
+`icloud` CLI).
+
+## Fix
+`docker-entrypoint.sh` now:
+- `mkdir -p /config/python_keyring` (alongside `/config/session_data`)
+- `export XDG_DATA_HOME=/config`
+- `chown abc:abc /config/python_keyring` — the existing conditional
+  `chown -R` block only runs for top-level dirs whose uid:gid doesn't
+  already match `abc`, so on installs where bind-mounted `/config` is
+  already `abc:abc` (PUID maps to a real host user), the new subdir
+  stays root-owned and unwritable. Explicit chown fixes that.
+
+`/config` is the existing bind-mounted volume that already holds
+`session_data` and `config.yaml`, so no new mount is required and no
+docker-compose changes needed by users.
+
+## Validation
+Tested in a live container by manually replicating the new entrypoint
+steps:
+
+\`\`\`
+$ chown abc:abc /config/python_keyring
+$ su-exec abc sh -c 'echo test > /config/python_keyring/canary.txt'  # OK
+$ XDG_DATA_HOME=/config su-exec abc python -c '
+    import keyring
+    print("backend:", keyring.get_keyring().__class__.__name__)
+    keyring.set_password("test", "user", "secret")
+    print("get:", keyring.get_password("test", "user"))
+  '
+backend: PlaintextKeyring
+get: secret
+$ ls /config/python_keyring/keyring_pass.cfg
+/config/python_keyring/keyring_pass.cfg
+\`\`\`
+
+End-to-end: container recreate → web-UI auth flow → recreate again →
+``auth_state: ready`` preserved (verified on a real install).
+
+## Backward compatibility
+- Existing installs that already have a keyring entry at the old
+  `~/.local/share/python_keyring/keyring_pass.cfg` location keep
+  working until the container is recreated.
+- On the first recreate after upgrading, the new
+  `/config/python_keyring/` is empty; the existing retry-login +
+  interactive-auth path runs once. Subsequent recreates pick up the
+  persisted keyring and start syncing without prompting.
+
+## Tests
+Shell-only change to the entrypoint; covered indirectly by the
+existing `tests/test_docker_entrypoint.py` suite (entrypoint syntax
++ ownership setup). No new tests added.
 ```
 
 ---

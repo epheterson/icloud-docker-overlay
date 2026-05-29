@@ -1,6 +1,12 @@
-# Upstream PR submission guide (ten PRs, push tonight)
+# Upstream PR submission guide (thirteen PRs)
 
-Ten PRs total — two to `mandarons/icloudpy`, eight to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
+Thirteen PRs total — two to `mandarons/icloudpy`, eleven to `mandarons/icloud-docker`. Each is a single feature for clean maintainer review. Submit in the order below — independence note for each.
+
+**Recommended submission order:**
+
+1. **PR 13 first** (`fix/test-suite-non-container-hosts`) — fixes the suite for everyone, no dependencies. Lets every subsequent PR be reviewed against a green baseline instead of "these 20 failures are pre-existing."
+2. **PRs 1–2 next** (icloudpy fixes) — independent of the docker repo.
+3. **PRs 3–12 in dependency order** — see per-PR independence notes below.
 
 For each PR: easiest path is to **open the URL in a browser** and paste the body manually. The `gh pr create` commands are provided as alternatives.
 
@@ -657,6 +663,189 @@ End-to-end: container recreate → web-UI auth flow → recreate again →
 Shell-only change to the entrypoint; covered indirectly by the
 existing `tests/test_docker_entrypoint.py` suite (entrypoint syntax
 + ownership setup). No new tests added.
+```
+
+---
+
+## PR 11: iCloud Drive package files — treat unrecognised mime as single-file bundle
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/fix/drive-package-single-file-bundles
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes
+**Title:** `fix(drive): treat unrecognised-mime "package" downloads as single-file bundles instead of failures`
+
+```markdown
+## Summary
+Stops the false "0 successful, N failed" log noise and
+per-sync-cycle re-download for iCloud Drive package files that
+libmagic can't identify as archives (Apple iWork .key/.pages/.numbers,
+third-party .jmb, etc).
+
+## Problem
+iCloud Drive serves "package" files (Finder bundle types: .band, .key,
+.jmb, etc.) via `/packageDownload?` URLs as opaque archive bytes.
+`process_package()` only recognises `application/zip` and
+`application/gzip` mime types. Anything else falls through to
+`return None`, which the caller at `drive_file_download.py:64`
+interprets as a hard download failure — even though the bytes have
+ALREADY been written to disk and are perfectly usable.
+
+Result: parallel-download log says `0 successful, N failed`, and
+because the file is marked as "not-done" in bookkeeping, every
+subsequent sync cycle re-downloads it.
+
+## Fix
+- `process_package()` returns the local_file path on unrecognised
+  mime instead of `None`. The bytes ARE the canonical local
+  representation for these bundle types — the file opens in
+  Keynote/Pages/etc directly.
+- Log level drops from ERROR to INFO: "Package format not recognised
+  for unpacking; keeping as single-file bundle: {path}"
+- `download_file()` only treats explicit `None` as failure (was
+  treating any falsy value as failure).
+
+## Validation
+- New test `test_download_file_keeps_unrecognised_package_as_single_file`
+  exercises the new success path.
+- Renamed test `test_process_package_unrecognised_mime_preserves_file`
+  documents the new contract.
+- Fixed `test_download_file_returns_none_on_processing_failure` to
+  patch the correct module-level binding (was patching wrong path
+  but happened to pass on the old contract).
+- Real-world: Eric's 111K-photo library + 40 .jmb / .key files —
+  before this PR every sync re-downloaded ~300 MB of these files
+  and logged ~50 ERROR lines per cycle. After: files preserved,
+  logs clean.
+
+## Known follow-up
+The next-sync dedup may still trigger a re-download because
+`file_exists()` compares `getsize(local_file)` to `item.size`, and
+for flat bundles those differ (`item.size` is the unpacked contents
+total). A sidecar-marker or mtime-fallback comparator would close
+the loop. Out of scope for this focused fix.
+```
+
+---
+
+## PR 12: Streaming photo enumeration — bound peak RSS by chunk size
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/perf/streaming-photo-enumeration
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes
+**Title:** `perf(photos): stream album in fixed-size chunks (bounds peak RSS, fixes OOM on large libraries)`
+
+```markdown
+## Summary
+Photos sync OOM-kills on large libraries because
+`_collect_album_download_tasks()` materializes the entire per-photo
+download-task list before draining. This PR converts to a streaming
+buffer-and-drain pipeline so peak memory is bounded by `chunk_size`
+instead of `len(album)`.
+
+## Problem
+On a 111K-photo iCloud library, the materialised task list peaks at
+~4 GB RSS during enumeration. Kernel-confirmed cgroup OOM at the
+4 GB cap:
+
+`Memory cgroup out of memory: Killed process (python) total-vm:4270872kB anon-rss:4181524kB`
+
+Forces operators to size containers at 8 GB+ even though steady-state
+usage is well under 1 GB.
+
+## Fix
+- `_collect_and_execute_album_in_chunks()` buffers up to
+  `chunk_size` (default 1000) DownloadTaskInfo entries, drains them
+  via `execute_parallel_downloads`, clears the buffer, then collects
+  the next chunk. Memory bounded by `chunk_size`, not `len(album)`.
+- `sync_album_photos()` calls the new function instead of the
+  previous two-step `_collect_album_download_tasks` + drain.
+- Legacy `_collect_album_download_tasks` kept as a thin wrapper for
+  test backward-compat.
+- New `photos.enumeration_chunk_size` config knob lets operators
+  tune for memory vs. throughput. Defensive about non-int /
+  non-positive values (fall back to default).
+
+## Validation
+- 11 new tests in `tests/test_streaming_enumeration.py`:
+  - Counts and number of drain calls match unchunked semantics
+  - Empty album → no drain call
+  - Partial final chunk drained (13 photos / chunk=5 → 3 calls of 5/5/3)
+  - Invalid chunk_size falls back to default
+  - **The behavioural contract:**
+    `test_buffer_never_exceeds_chunk_size` — observes buffer length at
+    every drain call. 2000 photos with chunk_size=50 → all drain calls
+    see ≤50 tasks. Fires immediately if streaming regresses to monolithic.
+  - 6 config-getter cases (default, explicit int, 0, negative, garbage
+    string, None config).
+- Existing photo + album orchestrator suite: no regressions.
+- Real-world validation pending after deploy: on a 111K-photo library,
+  this should let `mem_limit` drop back from 8 GB to ~2 GB.
+
+## Tradeoffs
+- Chunked downloads change the log shape — N "Parallel downloads
+  completed" lines per album instead of one. Documented; could add
+  a per-album summary line at the end as a follow-up.
+- Failure aggregation: per-chunk counts sum cleanly into total,
+  matches existing semantics.
+- Throughput within a chunk vs. across the full album — iCloud's
+  per-account concurrency is the bottleneck anyway, not material.
+
+## Out of scope
+- Streaming the photo-asset cache inside `icloudpy` (deeper problem).
+  This PR works around it at the mandarons layer.
+- Live Photo pairing across chunk boundaries — handled by the
+  per-photo task collector; HEIC + MOV land in the same chunk.
+```
+
+---
+
+## PR 13: Test suite passes on non-container dev hosts
+
+**Open:** https://github.com/epheterson/icloud-docker/pull/new/fix/test-suite-non-container-hosts
+**Target:** `mandarons/icloud-docker:main`
+**Independent:** yes (recommend land FIRST — green baseline for every other PR)
+**Title:** `test: green the suite on non-container dev hosts (macOS, sandboxes, etc.)`
+
+```markdown
+## Summary
+The test suite assumed `/config` exists and is writable. On macOS dev
+hosts and any sandbox where the container's `/config` mount isn't
+present, ~20 tests fail with `FileNotFoundError` on usage cache
+writes, session-data cookie directory creation, or hardcoded
+`/config/...` path assertions.
+
+This makes TDD on the codebase painful — `pytest` is red on a
+healthy local checkout, drowning real failures in noise. CI in
+container passes because `/config` is writable inside.
+
+## Fix
+- `src/__init__.py` + `src/usage.py`: `ICLOUD_DOCKER_CONFIG_DIR` env
+  var overrides the `/config` base. Defaults to `/config` so
+  production container deployments are unchanged.
+- `src/sync.py`: `get_api_instance()` late-binds the `cookie_directory`
+  default (was captured at function-definition time, which made
+  conftest redirects ineffective).
+- `tests/conftest.py`: NEW session-wide fixture redirects
+  `ICLOUD_DOCKER_CONFIG_DIR` to a tempdir, patches the cached
+  constants, cleans up at session end.
+- `tests/test_sync.py`: assertion uses the resolved
+  `DEFAULT_COOKIE_DIRECTORY` instead of hardcoded
+  `/config/session_data`.
+
+## Validation
+- macOS dev host: **435 / 435 tests pass** on this branch (up from
+  ~415 / 435 with 20 pre-existing failures on bare main).
+- Linux/CI: no change — `ICLOUD_DOCKER_CONFIG_DIR` is unset, falls
+  back to `/config`, all original behaviour preserved.
+- Production deployments: zero behavior change — paths still resolve
+  to `/config/...` in the container.
+
+## Backward compatibility
+- Existing production installs: completely unchanged. The env var is
+  only set in test environments where `/config` isn't writable.
+- Test environments that already use a `/config` mount: opt-in by
+  not setting `ICLOUD_DOCKER_CONFIG_DIR`. Fixture honours explicit
+  caller override.
 ```
 
 ---

@@ -464,7 +464,7 @@ Note: the next-sync dedup may still trigger a re-download because `file_exists()
 
 ## How the image is composed (provenance)
 
-This image is built from a fork of `mandarons/icloud-docker` whose `requirements.txt` pins a fork of `mandarons/icloudpy`. Twelve pending upstream PRs (2 to `icloudpy` + 10 to `icloud-docker`):
+This image is built from a fork of `mandarons/icloud-docker` whose `requirements.txt` pins a fork of `mandarons/icloudpy`. Thirteen pending upstream PRs (2 to `icloudpy` + 11 to `icloud-docker`):
 
 ### To `mandarons/icloudpy` (the underlying iCloud Python library)
 1. [`fix/ios-26.4-auth`](https://github.com/epheterson/icloudpy/tree/fix/ios-26.4-auth) — iOS 26.4 SRP auth fix
@@ -481,6 +481,7 @@ This image is built from a fork of `mandarons/icloud-docker` whose `requirements
 10. [`feat/persist-keyring`](https://github.com/epheterson/icloud-docker/tree/feat/persist-keyring) — `XDG_DATA_HOME=/config` so the keyring survives container recreation
 11. [`fix/drive-package-single-file-bundles`](https://github.com/epheterson/icloud-docker/tree/fix/drive-package-single-file-bundles) — `process_package()` returns the local file path on unrecognised mime instead of `None` so iWork/JMG/etc files are no longer counted as failed downloads
 12. [`perf/streaming-photo-enumeration`](https://github.com/epheterson/icloud-docker/tree/perf/streaming-photo-enumeration) — chunked enumeration in `album_sync_orchestrator` so Photos sync RSS stays bounded by `chunk_size` instead of `len(album)` (kernel-confirmed OOM at 4 GB on a 111K-photo library before this PR; bounded at ~200 MB after)
+13. [`fix/test-suite-non-container-hosts`](https://github.com/epheterson/icloud-docker/tree/fix/test-suite-non-container-hosts) — `ICLOUD_DOCKER_CONFIG_DIR` env override + conftest tempdir redirect so the suite passes on macOS dev hosts (~20 prior FileNotFoundErrors → 0). Recommend landing FIRST so every other PR can be reviewed against a green baseline.
 
 The combined branches for the actual build are [`epheterson/icloudpy@combined/all-fixes`](https://github.com/epheterson/icloudpy/tree/combined/all-fixes) and [`epheterson/icloud-docker@combined/all-features`](https://github.com/epheterson/icloud-docker/tree/combined/all-features).
 
@@ -488,9 +489,9 @@ The combined branches for the actual build are [`epheterson/icloudpy@combined/al
 
 ## Lifecycle / when to stop using this
 
-This repo + image are a **bridge**. When the ten mandarons/icloud-docker PRs (plus the two icloudpy PRs) merge upstream and mandarons publishes a release that pulls them in, switch back to vanilla `mandarons/icloud-drive:latest`. All your config + on-disk files keep working.
+This repo + image are a **bridge**. When the eleven mandarons/icloud-docker PRs (plus the two icloudpy PRs) merge upstream and mandarons publishes a release that pulls them in, switch back to vanilla `mandarons/icloud-drive:latest`. All your config + on-disk files keep working.
 
-This README will be updated with "✅ Upstream has merged X" markers as each PR lands. When all twelve are merged, the README will say "Archived — use upstream."
+This README will be updated with "✅ Upstream has merged X" markers as each PR lands. When all thirteen are merged, the README will say "Archived — use upstream."
 
 ---
 

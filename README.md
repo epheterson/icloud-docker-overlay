@@ -181,7 +181,7 @@ docker compose pull && docker compose up -d
 docker exec -it icloud sh -c "icloud --username=you@apple.example --session-directory=/config/session_data"
 ```
 
-### 6. **Run the per-photo migration-match check BEFORE the real sync**
+### 6. **Run the per-file migration-match check BEFORE the real sync**
 
 After 2FA but before letting the sync loop touch a single file, run:
 
@@ -189,16 +189,18 @@ After 2FA but before letting the sync loop touch a single file, run:
 docker exec -it icloud python /app/src/main.py --dry-run --check-files 200
 ```
 
-This walks 200 newest photos per library, computes the on-disk path mandarons WOULD use, and reports per-library counts:
+This walks up to 200 photos per library AND up to 200 Drive files, computes the on-disk path mandarons WOULD use, and reports per-service counts:
 
 - `would_skip` — file exists at target path AND size matches (good — migration matching working)
 - `size_mismatch` — file exists but different size (would re-download — investigate)
-- `not_found` — target path empty (would download as new — expected for new photos, alarming if old)
+- `not_found` — target path empty (would download as new — expected for new items, alarming if old)
 - `error` — couldn't compute path or check disk
 
-Healthy migration: **`would_skip` should dominate** for the recent-photo sample. If `not_found` dominates, your `library_destinations` / `folder_format` / `filename_format` don't line up with boredazfcuk's on-disk layout — fix BEFORE running the real sync, or mandarons will re-download your entire library.
+Reported separately for each photo library (`PrimarySync`, `SharedSync-<GUID>`, etc.) and for iCloud Drive. Photos validates `library_destinations` / `folder_format` / `filename_format`; Drive validates `drive.destination` and that your existing Drive tree mirrors what iCloud reports.
 
-Pass `--check-files 0` to walk the entire library (slow on 100K+ libraries; do a small sample first).
+Healthy migration: **`would_skip` should dominate** for the sample. If `not_found` dominates on a service, your config doesn't line up with the existing on-disk layout — fix BEFORE running the real sync, or mandarons will re-download everything for that service.
+
+Pass `--check-files 0` to walk the entire library + entire Drive (slow on 100K+ libraries; do a small sample first).
 
 ### 7. Let it sync
 ```bash

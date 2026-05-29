@@ -47,6 +47,9 @@ services:
       - ./config:/config
       - /path/to/your/photos:/icloud/photos
       - /path/to/your/drive:/icloud/drive
+    # See "Resource sizing" below — tune to your photo library size.
+    mem_limit: 4g
+    memswap_limit: 6g
 ```
 
 `/path/to/icloud/config/config.yaml` — minimal:
@@ -166,12 +169,39 @@ services:
       - /volume1/photos/iCloud:/icloud/photos          # ← your existing parent
       # Drive is brand-new:
       - /volume1/photos/iCloud-Drive:/icloud/drive
+    # 4GB suits a ~100K-photo library. Bump if your library is larger.
+    # See "Resource sizing" section below.
+    mem_limit: 4g
+    memswap_limit: 6g
 ```
 
 ### 5. Run it
 ```bash
 docker compose pull && docker compose up -d
 docker exec -it icloud sh -c "icloud --username=you@apple.example --session-directory=/config/session_data"
+```
+
+### 6. **Run the per-photo migration-match check BEFORE the real sync**
+
+After 2FA but before letting the sync loop touch a single file, run:
+
+```bash
+docker exec -it icloud python /app/src/main.py --dry-run --check-files 200
+```
+
+This walks 200 newest photos per library, computes the on-disk path mandarons WOULD use, and reports per-library counts:
+
+- `would_skip` — file exists at target path AND size matches (good — migration matching working)
+- `size_mismatch` — file exists but different size (would re-download — investigate)
+- `not_found` — target path empty (would download as new — expected for new photos, alarming if old)
+- `error` — couldn't compute path or check disk
+
+Healthy migration: **`would_skip` should dominate** for the recent-photo sample. If `not_found` dominates, your `library_destinations` / `folder_format` / `filename_format` don't line up with boredazfcuk's on-disk layout — fix BEFORE running the real sync, or mandarons will re-download your entire library.
+
+Pass `--check-files 0` to walk the entire library (slow on 100K+ libraries; do a small sample first).
+
+### 7. Let it sync
+```bash
 docker logs -f icloud
 ```
 
@@ -376,6 +406,37 @@ What's NOT in v1 (deferred — open an issue if you want any of these):
 - "Force sync now" button.
 - Inline content browser (Notes / Drive contents view).
 - CSRF token (relies on the auth-proxy layer to gate access).
+
+---
+
+## Operational notes
+
+### Resource sizing
+
+Photo libraries are the dominant memory pressure. mandarons holds asset metadata in memory while walking a library; on a 111K-photo library the Photos sync alone needs **~2-3 GB resident** during the initial scan, plus headroom for thumbnails and the existence check.
+
+| Library size | `mem_limit` | `memswap_limit` |
+|---|---|---|
+| <10K photos | 1 GB | 2 GB |
+| 10–50K photos | 2 GB | 4 GB |
+| 50–150K photos (**default recommendation**) | 4 GB | 6 GB |
+| >150K photos | 6–8 GB | 2× mem |
+
+How to know you're undersized: container restarts with `Killed` in the logs mid-`Syncing All Photos`, and the next start re-runs Drive sync from scratch. On Linux, `dmesg | grep -i oom` confirms; on Synology, the container `inspect` shows `OOMKilled:true` until the next restart resets the flag.
+
+Drive sync is memory-light (linear walk per folder); Photos is the constraint. Once a sync has completed a full pass, steady-state memory is far lower — but you need the headroom for the initial backfill.
+
+### iCloud Drive packages (iWork, etc.)
+
+Apple's iWork formats (`.key`, `.pages`, `.numbers`) and similar bundle formats (`.band` GarageBand, third-party `.jmb`, etc.) are technically "directory bundles" — Finder shows one file, but the on-disk representation is a directory of XML + assets.
+
+iCloud Drive serves these as a single archive per download. mandarons attempts to detect the archive type via libmagic and unpack it. If the archive type is `application/zip` or `application/gzip`, it works. **Anything else (most Apple iWork files report `application/octet-stream` for some reason) currently triggers a verbose `Unhandled file type` error and the file is counted as a failed download**, even though the bytes ARE saved to disk as a flat single-file bundle (which Keynote, Pages, etc. open fine).
+
+Practical effect:
+- **No data loss** — the file is present at the target path, you can open it directly.
+- **Wasted bandwidth on every container restart** — mandarons re-downloads the file each time, because the "failed" flag prevents marking it as up-to-date.
+
+Fix in progress as a separate upstream PR. Until it lands, expect noisy `drive_package_processing.py :: Unhandled file type` lines for iWork/`.jmb`/etc files. Safe to ignore unless your Drive sync is dominated by these (large iWork archives), in which case bumping `mem_limit` doesn't help; only the upstream fix or removing those files from iCloud Drive does.
 
 ---
 

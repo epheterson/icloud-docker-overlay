@@ -493,6 +493,11 @@ Full suite passes.
 mount-marker helpers so it works on either main or the combined fork)
 **Title:** `feat: embedded web UI — dashboard + on-device 2FA re-auth flow`
 
+**Screenshots** (captured from a sanitized local container so no Apple
+ID / library GUIDs leak):
+- Dashboard: [`docs/screenshots/dashboard.png`](https://github.com/epheterson/icloud-docker-plus/blob/main/docs/screenshots/dashboard.png)
+- Auth flow: [`docs/screenshots/auth.png`](https://github.com/epheterson/icloud-docker-plus/blob/main/docs/screenshots/auth.png)
+
 ```markdown
 ## Summary
 Adds a small Flask app that runs in a daemon thread alongside the sync

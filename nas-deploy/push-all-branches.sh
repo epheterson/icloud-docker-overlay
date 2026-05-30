@@ -59,7 +59,7 @@ echo "[force-with-lease — history rewritten today]"
 for b in "${FORCE_PUSH[@]}"; do
   printf "  %-50s  " "$b"
   if git show-ref --verify --quiet "refs/remotes/origin/$b"; then
-    git log --oneline "origin/$b..$b" 2>/dev/null | head -1 || echo "(no new commits — skip)"
+    git log --oneline -1 "origin/$b..$b" 2>/dev/null || echo "(no new commits — skip)"
   else
     echo "(no origin ref — will become first-push)"
   fi
@@ -68,7 +68,7 @@ echo
 echo "[first push — new branches]"
 for b in "${NEW_PUSH[@]}"; do
   printf "  %-50s  " "$b"
-  git log --oneline "$b" 2>/dev/null | head -1
+  git log --oneline -1 "$b" 2>/dev/null || echo "(branch missing!)"
 done
 echo
 echo "[regular push]"

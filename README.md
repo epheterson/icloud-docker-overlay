@@ -131,23 +131,23 @@ Opt-in via `app.web_ui.enabled: true`. Dashboard shows current Apple ID, per-ser
 
 The 13 PRs feeding this image, in dependency order:
 
-**To `mandarons/icloudpy`** — RFC: [issue #137](https://github.com/mandarons/icloudpy/issues/137)
-1. [`fix/ios-26.4-auth`](https://github.com/epheterson/icloudpy/tree/fix/ios-26.4-auth) — iOS 26.4 SRP auth
-2. [`feat/live-photos`](https://github.com/epheterson/icloudpy/tree/feat/live-photos) — Live Photo `.mov` via new `live_video_*` keys
+**To `mandarons/icloudpy`** — RFC: [icloudpy#137](https://github.com/mandarons/icloudpy/issues/137)
+1. [icloudpy#138](https://github.com/mandarons/icloudpy/pull/138) — iOS 26.4 SRP auth
+2. [icloudpy#139](https://github.com/mandarons/icloudpy/pull/139) — Live Photo `.mov` via new `live_video_*` keys
 
-**To `mandarons/icloud-docker`** — RFC: [issue #454](https://github.com/mandarons/icloud-docker/issues/454)
+**To `mandarons/icloud-docker`** — RFC: [icloud-docker#454](https://github.com/mandarons/icloud-docker/issues/454)
 
-3. [`feat/photos-library-destinations`](https://github.com/epheterson/icloud-docker/tree/feat/photos-library-destinations)
-4. [`feat/photos-live-photo-pair-download`](https://github.com/epheterson/icloud-docker/tree/feat/photos-live-photo-pair-download) *(depends on icloudpy PR 2)*
-5. [`feat/photos-filename-format-simple`](https://github.com/epheterson/icloud-docker/tree/feat/photos-filename-format-simple)
-6. [`feat/photos-preserve-originals-as-bak`](https://github.com/epheterson/icloud-docker/tree/feat/photos-preserve-originals-as-bak)
-7. [`feat/dry-run`](https://github.com/epheterson/icloud-docker/tree/feat/dry-run)
-8. [`feat/require-mount-marker`](https://github.com/epheterson/icloud-docker/tree/feat/require-mount-marker)
-9. [`feat/web-ui`](https://github.com/epheterson/icloud-docker/tree/feat/web-ui)
-10. [`feat/persist-keyring`](https://github.com/epheterson/icloud-docker/tree/feat/persist-keyring)
-11. [`fix/drive-package-single-file-bundles`](https://github.com/epheterson/icloud-docker/tree/fix/drive-package-single-file-bundles)
-12. [`perf/streaming-photo-enumeration`](https://github.com/epheterson/icloud-docker/tree/perf/streaming-photo-enumeration)
-13. [`fix/test-suite-non-container-hosts`](https://github.com/epheterson/icloud-docker/tree/fix/test-suite-non-container-hosts) — recommended FIRST so the others review against a green suite
+3. [icloud-docker#456](https://github.com/mandarons/icloud-docker/pull/456) — `photos.library_destinations`
+4. [icloud-docker#465](https://github.com/mandarons/icloud-docker/pull/465) — auto-download Live Photo `.mov` pair *(depends on icloudpy#139)*
+5. [icloud-docker#457](https://github.com/mandarons/icloud-docker/pull/457) — `photos.filename_format: simple`
+6. [icloud-docker#458](https://github.com/mandarons/icloud-docker/pull/458) — `photos.preserve_originals_as_bak`
+7. [icloud-docker#459](https://github.com/mandarons/icloud-docker/pull/459) — `--dry-run` CLI flag
+8. [icloud-docker#463](https://github.com/mandarons/icloud-docker/pull/463) — `require_mount_marker` failsafe
+9. [icloud-docker#464](https://github.com/mandarons/icloud-docker/pull/464) — embedded web UI
+10. [icloud-docker#460](https://github.com/mandarons/icloud-docker/pull/460) — persist `python-keyring` across container recreates
+11. [icloud-docker#461](https://github.com/mandarons/icloud-docker/pull/461) — Drive package single-file bundles (iWork, JMG)
+12. [icloud-docker#462](https://github.com/mandarons/icloud-docker/pull/462) — streaming photo enumeration (bounds peak RSS)
+13. [icloud-docker#455](https://github.com/mandarons/icloud-docker/pull/455) — test suite green baseline (recommended FIRST so the others review against a clean suite)
 
 Combined branches for testing the full stack: [`epheterson/icloudpy@combined/all-fixes`](https://github.com/epheterson/icloudpy/tree/combined/all-fixes) + [`epheterson/icloud-docker@combined/all-features`](https://github.com/epheterson/icloud-docker/tree/combined/all-features).
 
